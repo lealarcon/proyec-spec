@@ -1,0 +1,819 @@
+\section{Anexos}
+
+\begin{lstlisting} [language=Python,basicstyle=\tiny, label={code:generate_cscan},caption= {Codigo Python para generar trazas C }]
+# Created By Luis Eduardo Quibano Alarcon
+
+import os
+import numpy as np
+import random
+import math
+import sys
+from user_libs.antennas.MALA import antenna_like_MALA_1200
+from user_libs.antennas.GSSI import antenna_like_GSSI_1500
+from gprMax.exceptions import CmdInputError
+from gprMax.input_cmd_funcs import *
+import json
+
+userlibdir = os.path.dirname(os.path.abspath(__file__))
+
+def cScanAntenna(upx, upy, upz, resolution, antenna_type, x_spacing,y_spacing,z_antenna,current_model_run,number_model_runs,inputfile, **kwargs):
+    """
+
+    Funcion utilizada para generar escenarios de trazas C dependiendo del tipo de antena a usar,
+    este modulo funciona como extencion de gprMax para optimizar el proceso de simulacion
+
+    Argumentos:
+        upx, upy, upz :  valores en metros de las dimensiones x ,y,z del dominio
+        resoution: resolucion en m del dominio (discretizacion) dependiendo de este valor se genera el PML automaticamente
+        antenna_type:  tipo de antena , las opciones son: 'dipole' ,'MALA','GSSI'
+        x_spacing, y_spacing: espacio que se movera la antena en x y y en cada iteración
+        z_antenna: altura de la antena
+        current_model_run: detecta el numero de la iteracion que esta corriendo actualmente
+        number_model_runs: numero de iteraciones que va a tener el modelo
+        inputfile:  ruta donde se esta ejecutando el modelo
+
+        kwargs (dict): son valores opcionales, tales como la distancia entre atenas y polarizacion (para el caso de dipolo).
+    """
+    # upper right (x,y,z) coordinates
+    #upx = 0.5
+    #upy = 0.5
+    #upz = 0.5
+
+    # Resolution each coordinate
+    dx = resolution
+    dy = resolution
+    dz = resolution
+
+    # MINIMUM CELLS TO START
+    #Minimo de celdas por encima de la fronteras  (Por defecto el PML es 10 celdas)
+    startx = (dx * 14)
+    starty = (dy * 14)
+    startz = (dy * 14)
+
+    #si la distancia entre antenas no se define, se utilizan 0.05m por defecto
+    if "antennas_distance" in kwargs:
+        antennas_distance = kwargs.get('antennas_distance', None)
+    else:
+        antennas_distance = 0.05
+
+    last_xposition = round(upx - startx, 4)
+    last_yposition = round(upy - starty, 4)
+    last_zposition = round(upz - startz, 4)
+
+    #x_spacing = 0.05  # STEP DISTANCE IN X
+    #y_spacing = 0.05  # STEP DISTANCE IN Y
+    #z_antenna = 0.4
+
+    if (z_antenna > upz):
+        print ("ALTURA ANTENA SUPERA EL DOMINIO")
+        sys.exit()
+
+    if (antenna_type == "dipole"):
+        if "antenna_pol" in kwargs:
+            antenna_pol = kwargs.get('antenna_pol', None)
+        else:
+            antenna_pol = "z"
+
+        total_ascan = upx/x_spacing #Numero de ASCAN SIN PML SPACE
+
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        ascans_per_bscan = math.floor( (last_xposition-(startx+antennas_distance)) / x_spacing)
+        print("CADA " + str(ascans_per_bscan) + " A-SCANs ES UN B-SCAN")
+
+
+
+        xoffset = dx  # OFFTSET IN X FOR CELLS SPACING
+        yoffset = dy  # OFFTSET IN Y FOR CELLS SPACING
+
+        bscan_num = np.floor((current_model_run - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num = (current_model_run - 1) % ascans_per_bscan  # Current ASCAN NUMBER
+
+        x = round(startx + (ascan_num * x_spacing), 4)  # CREATE X POSITION
+        y = round(startx + (bscan_num * y_spacing), 4)  # CREATE Y POSITION
+
+        bscan_num_final = np.floor((number_model_runs - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num_final = np.ceil((number_model_runs - 1) % (ascans_per_bscan))  # Current ASCAN NUMBER
+
+        final_x = round(startx + antennas_distance + ((ascan_num_final) * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(starty + (bscan_num_final * y_spacing), 4)  # FINAL POSITION IN Y
+        print ("Ultima posicion de x: " + str(final_x))
+        print ("Ultima posicion de y: " + str(final_y))
+
+        data = {}
+        data['antennaType'] = "Dipole"
+        data['scansPerBScan'] = ascans_per_bscan
+        data['finalAntennaPointX'] = final_x
+        data['finalAntennaPointY'] = final_y
+        data['number_model_runs'] = number_model_runs
+        data['antenna_pol'] = antenna_pol
+        data['inputfile'] = inputfile
+
+        f = open(os.path.dirname(inputfile) + "/_Info_CSCAN.json", "w+")
+        f.write(json.dumps(data))
+        f.close()
+
+
+        if ((final_y) > last_yposition):
+            print("LA ANTENA SUPERA EL LIMITE DEL DOMINIO en Y que es " + str(last_yposition))
+            print("Ultima posicion de x: " + str(final_x))
+            print("Ultima posicion de y: " + str(final_y))
+            print("Cambie el valor de n")
+            sys.exit()
+        else:
+            print("hertzian_dipole: " + str(antenna_pol) + " " + str(x) + " " + str(y) + " " + str(z_antenna) + " my_ricker")
+            print("rx: " + str( round(x + antennas_distance,4)) + " " + str(y) + " " + str(z_antenna) + " ")
+            print("#hertzian_dipole: " + str(antenna_pol) + " " + str(x) + " " + str(y) + " " + str(z_antenna) + " my_ricker")
+            print("#rx: " + str( round(x + antennas_distance,4)) + " " + str(y) + " " + str(z_antenna) + " ")
+
+    if (antenna_type == "MALA"):
+
+        # MALA DIMENSION
+        # http://docs.gprmax.com/en/latest/user_libs_antennas.html?highlight=MALA
+        xdimMALA = 0.184
+        ydimMALA = 0.109
+        zdimMALA = 0.046
+
+        if (round(z_antenna + zdimMALA / 2, 4) > last_zposition):
+            print("Posicion Z de la atena se sale del PLM")
+            sys.exit()
+
+        total_ascan = upx / x_spacing  # Numero de ASCAN SIN PML SPACE
+        antnnapointX = round(startx + xdimMALA / 2, 4)  # OFFTSET IN X FOR CELLS SPACING
+        antnnapointY = round(starty + ydimMALA / 2, 4)  # OFFTSET IN Y FOR CELLS SPACING
+
+        xoffset = antnnapointX
+        yoffset = antnnapointY
+
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        ascans_per_bscan = math.floor((last_xposition - (xoffset + xdimMALA / 2)) / x_spacing)
+
+        print("CADA " + str(ascans_per_bscan) + " A-SCANs ES UN B-SCAN")
+
+        bscan_num = np.floor((current_model_run - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num = current_model_run - (bscan_num * ascans_per_bscan) - 1  # Current ASCAN NUMBER
+        print("current a scan: ", ascan_num, " bscan: ", bscan_num)
+
+        xAntennaPoint = round(xoffset + (ascan_num * x_spacing), 4)  # CREATE X POSITION
+        yAntennaPoint = round(yoffset + (bscan_num * y_spacing), 4)  # CREATE Y POSITION
+
+        x = xAntennaPoint
+        y = yAntennaPoint
+
+        xAntennaEdgePoint = round(x + xdimMALA / 2, 4)
+        yAntennaEdgePoint = round(y + ydimMALA / 2, 4)
+
+        bscan_num_final = np.floor((number_model_runs - 1) / (ascans_per_bscan))  # CurrentBSCAN NUMBER
+        ascan_num_final = number_model_runs - (bscan_num_final * (ascans_per_bscan)) - 1  # Current ASCAN NUMBER
+
+        final_x = round(xoffset + (ascan_num_final * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(yoffset + (bscan_num_final * y_spacing), 4)  # FINAL POSITION IN Y
+        final_xAntennaEdgePoint = round(final_x + xdimMALA / 2, 4)
+        final_yAntennaEdgePoint = round(final_y + ydimMALA / 2, 4)
+
+        data = {}
+        data['antennaType'] = "MALA"
+        data['scansPerBScan'] = ascans_per_bscan
+        data['finalPositionXEdge'] = final_xAntennaEdgePoint
+        data['finalPositionYEdge'] = final_yAntennaEdgePoint
+        data['finalAntennaPointX'] = final_x
+        data['finalAntennaPointY'] = final_y
+        data['number_model_runs'] = number_model_runs
+        data['inputfile'] = inputfile
+
+        f = open(os.path.dirname(inputfile) + "/_Info_CSCAN.json", "w+")
+        f.write(json.dumps(data))
+        f.close()
+
+
+        if ((round(final_yAntennaEdgePoint, 4)) > last_yposition):
+            print("LA ANTENA SUPERA EL LIMITE DEL DOMINIO en Y que es " + str(last_yposition))
+            print("Ultima posicion de x: " + str(final_x + xdimMALA / 2))
+            print("Ultima posicion de y: " + str(final_y + starty))
+            print("Cambie el valor de n")
+            sys.exit()
+        else:
+            print("Ultima posicion de final_xAntennaEdgePoint: " + str(final_xAntennaEdgePoint))
+            print("Ultima posicion de final_yAntennaEdgePoint: " + str(final_yAntennaEdgePoint))
+
+        from user_libs.antennas.MALA import antenna_like_MALA_1200
+        # print ("antenna_like_MALA_1200("+str(x)+", "+str(y)+", "+str(z_antenna)+", "+str(dx)+")")
+        antenna_like_MALA_1200(x, y, z_antenna, dx)
+
+    if (antenna_type == "GSSI"):
+
+        # MALA DIMENSION
+        # http://docs.gprmax.com/en/latest/user_libs_antennas.html?highlight=GSSI
+
+        xdimGSSI = 0.170
+        ydimGSSI = 0.108
+        zdimGSSI = 0.045
+
+        if (round(z_antenna+zdimGSSI / 2,4)>last_zposition):
+            print ("Posicion Z de la Antena GSSI sobrepasa el PLM")
+            sys.exit()
+
+
+        total_ascan = upx / x_spacing  # Numero de ASCAN SIN PML SPACE
+        antnnapointX = round(startx + xdimGSSI / 2, 4)  # OFFTSET IN X FOR CELLS SPACING
+        antnnapointY = round(starty + ydimGSSI / 2, 4)  # OFFTSET IN Y FOR CELLS SPACING
+        xoffset = antnnapointX
+        yoffset = antnnapointY
+        print(" antnnapointX", xoffset, " antnnapointY ", yoffset)
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        ascans_per_bscan = math.floor((last_xposition - (xoffset + xdimGSSI / 2)) / x_spacing)
+
+        print("CADA " + str(ascans_per_bscan) + " A-SCANs ES UN B-SCAN")
+
+        bscan_num = np.floor((current_model_run - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num = current_model_run - (bscan_num * ascans_per_bscan) - 1  # Current ASCAN NUMBER
+        print("current a scan: ", ascan_num, " bscan: ", bscan_num)
+
+        xAntennaPoint = round(xoffset + (ascan_num * x_spacing), 4)  # CREATE X POSITION
+        yAntennaPoint = round(yoffset + (bscan_num * y_spacing), 4)  # CREATE Y POSITION
+
+        x = xAntennaPoint
+        y = yAntennaPoint
+
+        xAntennaEdgePoint = round(x + xdimGSSI / 2, 4)
+        yAntennaEdgePoint = round(y + ydimGSSI / 2, 4)
+
+        bscan_num_final = np.floor((number_model_runs - 1) / (ascans_per_bscan))  # CurrentBSCAN NUMBER
+        ascan_num_final = number_model_runs - (bscan_num_final * (ascans_per_bscan)) - 1  # Current ASCAN NUMBER
+
+        final_x = round(xoffset + (ascan_num_final * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(yoffset + (bscan_num_final * y_spacing), 4)  # FINAL POSITION IN Y
+        final_xAntennaEdgePoint = round(final_x + xdimGSSI / 2, 4)
+        final_yAntennaEdgePoint = round(final_y + ydimGSSI / 2, 4)
+
+        data = {}
+        data['antennaType'] = "GSSI"
+        data['scansPerBScan'] = ascans_per_bscan
+        data['finalPositionXEdge'] = final_xAntennaEdgePoint
+        data['finalPositionYEdge'] = final_yAntennaEdgePoint
+        data['finalAntennaPointX'] = final_x
+        data['finalAntennaPointY'] = final_y
+        data['number_model_runs'] = number_model_runs
+        data['inputfile'] = inputfile
+
+
+
+        f = open(os.path.dirname(inputfile) + "/_Info_CSCAN.json", "w+")
+        f.write(json.dumps(data))
+        f.close()
+
+
+        if ((round(final_yAntennaEdgePoint,4)) > last_yposition):
+            print ("LA ANTENA SUPERA EL LIMITE DEL DOMINIO en Y que es " + str(last_yposition))
+            print ("Ultima posicion de x: " + str(final_xAntennaEdgePoint))
+            print ("Ultima posicion de y: " + str(final_yAntennaEdgePoint))
+            print ("Cambie el valor de n")
+            sys.exit()
+        else:
+            print ("Ultima posicion de final_xAntennaEdgePoint: " + str(final_xAntennaEdgePoint))
+            print ("Ultima posicion de final_yAntennaEdgePoint: " + str(final_yAntennaEdgePoint))
+            print("xAntennaEdgePoint", xAntennaEdgePoint, " yAntennaEdgePoint", yAntennaEdgePoint)
+            print("xAntennaPoint ", x, "yAntennaPoint", y)
+
+        # print ("BSCAN NUM:" + str(bscan_num))
+        # print ("A SCAN NUM:" + str(ascan_num))
+        # print (str(x+xdimGSSI/2) + "\n")
+        # print (str(y+ydimGSSI/2) + "\n")
+        from user_libs.antennas.GSSI import antenna_like_GSSI_1500
+        # print("antenna_like_GSSI_1500(" + str(x) + ", " + str(y) + ", " + str(z_antenna) + ", resolution=" + str(dx) + ")")
+        antenna_like_GSSI_1500(x, y, z_antenna, resolution=dx)
+\end{lstlisting}
+\newpage
+
+
+
+\begin{lstlisting} [language=Python,basicstyle=\tiny, label={code:calc_iter},caption= {Codigo Python para calcular número de iteraciones }]
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Created By Luis Eduardo Quibano Alarcon
+import os
+import numpy as np
+import random
+import math
+import sys
+import ast
+def calculate_dipole():
+    stop=False
+    number_model_runs = 1
+
+    while (stop==False):
+        total_ascan = upx / x_spacing  # Numero de ASCAN SIN PML SPACE
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        # (10 CELDAS DE SEPARACION AL INICIO Y FINAL DEL DOMINIO)
+        ascans_per_bscan = math.floor( (last_xposition-(startx+antennas_distance)) / x_spacing)
+
+        xoffset = dx  # OFFTSET IN X FOR CELLS SPACING
+        yoffset = dy  # OFFTSET IN Y FOR CELLS SPACING
+
+        bscan_num = np.floor((number_model_runs - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num = (number_model_runs - 1) % ascans_per_bscan  # Current ASCAN NUMBER
+
+        final_x = round(startx + antennas_distance + ((ascan_num) * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(starty + (bscan_num * y_spacing), 4)  # FINAL POSITION IN Y
+        if ((final_y) >= last_yposition):
+            print ("    --------------------------------------------------")
+            print ("    EL NUMERO n A ASIGNAR PARA EL DIPOLO ES "+str(number_model_runs-1))
+            print ("    Agregar en el programa:")
+            print ("#python:")
+            print ("import os")
+            print ("import numpy as np")
+            print ("import random")
+            print ("import math")
+            print ("import sys")
+            print ("from user_libs.antennas.CScan_Antennas import cScanAntenna")
+            print ('cScanAntenna('+str(upx)+', '+str(upy)+', '+str(upz)+', '+str(resolution)+', "dipole", '+str(x_spacing)+', '+str(y_spacing)+', '+str(z_antenna)+', current_model_run, number_model_runs, inputfile, antennas_distance='+str(antennas_distance)+',antenna_pol='+str(antenna_pol)+')')
+            print ("#end_python:")
+            stop=True
+        else:
+            number_model_runs+=1
+
+
+def calculate_MALA():
+    stop=False
+    number_model_runs = 1
+
+    while (stop==False):
+        # MALA DIMENSION
+        # http://docs.gprmax.com/en/latest/user_libs_antennas.html?highlight=MALA
+        xdimMALA = 0.184
+        ydimMALA = 0.109
+        zdimMALA = 0.046
+
+        if (round(z_antenna+zdimMALA / 2,4)>last_zposition):
+            print ("Posicion Z de la atena se sale del PLM")
+            sys.exit()
+
+        total_ascan = upx / x_spacing  # Numero de ASCAN SIN PML SPACE
+        antnnapointX = round(startx + xdimMALA / 2, 4)  # OFFTSET IN X FOR CELLS SPACING
+        antnnapointY = round(starty + ydimMALA / 2, 4)  # OFFTSET IN Y FOR CELLS SPACING
+
+        xoffset = antnnapointX
+        yoffset = antnnapointY
+
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        # (10 CELDAS DE SEPARACION AL INICIO Y FINAL DEL DOMINIO)
+        ascans_per_bscan = math.floor((last_xposition - (xoffset + xdimMALA / 2)) / x_spacing)
+
+        bscan_num_final = np.floor((number_model_runs - 1) / (ascans_per_bscan))  # CurrentBSCAN NUMBER
+        ascan_num_final = number_model_runs - (bscan_num_final * (ascans_per_bscan)) - 1  # Current ASCAN NUMBER
+
+        final_x = round(xoffset + (ascan_num_final * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(yoffset + (bscan_num_final * y_spacing), 4)  # FINAL POSITION IN Y
+        final_xAntennaEdgePoint = round(final_x + xdimMALA / 2, 4)
+        final_yAntennaEdgePoint = round(final_y + ydimMALA / 2, 4)
+
+        if ((final_yAntennaEdgePoint) > last_yposition):
+            print ("    --------------------------------------------------")
+            print ("    EL NUMERO n A ASIGNAR PARA ANTENA MALA ES " + str(number_model_runs - 1))
+            print ("    Agregar en el programa:")
+            print ("#python:")
+            print ("import os")
+            print ("import numpy as np")
+            print ("import random")
+            print ("import math")
+            print ("import sys")
+            print ("from user_libs.antennas.CScan_Antennas import cScanAntenna")
+            print ('cScanAntenna(' + str(upx) + ', ' + str(upy) + ', ' + str(upz) + ', ' + str(
+                resolution) + ', "MALA", ' + str(x_spacing) + ', ' + str(y_spacing) + ', ' + str(
+                z_antenna) + ', current_model_run, number_model_runs, inputfile)')
+            print ("#end_python:")
+            stop = True
+        else:
+            number_model_runs += 1
+
+
+def calculate_GSSI():
+    stop = False
+    number_model_runs = 1
+    while (stop == False):
+        # MALA DIMENSION
+        # http://docs.gprmax.com/en/latest/user_libs_antennas.html?highlight=GSSI
+        
+        xdimGSSI = 0.170
+        ydimGSSI = 0.108
+        zdimGSSI = 0.045
+
+        if (round(z_antenna+zdimGSSI / 2,4)>last_zposition):
+            print ("Posicion Z de la atena se sale del PLM")
+            sys.exit()
+
+        total_ascan = upx / x_spacing  # Numero de ASCAN SIN PML SPACE
+        antnnapointX = round(startx + xdimGSSI / 2, 4)  # OFFTSET IN X FOR CELLS SPACING
+        antnnapointY = round(starty + ydimGSSI / 2, 4)  # OFFTSET IN Y FOR CELLS SPACING
+        xoffset = antnnapointX
+        yoffset = antnnapointY
+        # NUMERO TOTAL DE A SCANS TENIENDO EN CUENTA LOS PML
+        ascans_per_bscan = math.floor((last_xposition - (xoffset + xdimGSSI / 2)) / x_spacing)
+
+
+        bscan_num = np.floor((number_model_runs - 1) / ascans_per_bscan)  # CurrentBSCAN NUMBER
+        ascan_num = number_model_runs - (bscan_num * ascans_per_bscan) - 1  # Current ASCAN NUMBER
+
+        xAntennaPoint = round(xoffset + (ascan_num * x_spacing), 4)  # CREATE X POSITION
+        yAntennaPoint = round(yoffset + (bscan_num * y_spacing), 4)  # CREATE Y POSITION
+
+        x = xAntennaPoint
+        y = yAntennaPoint
+
+        xAntennaEdgePoint = round(x + xdimGSSI / 2, 4)
+        yAntennaEdgePoint = round(y + ydimGSSI / 2, 4)
+
+        bscan_num_final = np.floor((number_model_runs - 1) / (ascans_per_bscan))  # CurrentBSCAN NUMBER
+        ascan_num_final = number_model_runs - (bscan_num_final * (ascans_per_bscan)) - 1  # Current ASCAN NUMBER
+
+        final_x = round(xoffset + (ascan_num_final * x_spacing), 4)  # FINAL POSITION IN X
+        final_y = round(yoffset + (bscan_num_final * y_spacing), 4)  # FINAL POSITION IN Y
+        final_xAntennaEdgePoint = round(final_x + xdimGSSI / 2, 4)
+        final_yAntennaEdgePoint = round(final_y + ydimGSSI / 2, 4)
+
+        if ((final_yAntennaEdgePoint) > last_yposition):
+            print ("    --------------------------------------------------")
+            print ("    EL NUMERO n A ASIGNAR PARA ANTENA GSSI ES " + str(number_model_runs - 1))
+            print ("    Agregar en el programa:")
+            print ("#python:")
+            print ("import os")
+            print ("import numpy as np")
+            print ("import random")
+            print ("import math")
+            print ("import sys")
+            print ("from user_libs.antennas.CScan_Antennas import cScanAntenna")
+            print ('cScanAntenna(' + str(upx) + ', ' + str(upy) + ', ' + str(upz) + ', ' + str(
+                resolution) + ', "GSSI", ' + str(x_spacing) + ', ' + str(y_spacing) + ', ' + str(
+                z_antenna) + ', current_model_run, number_model_runs, inputfile)')
+            print ("#end_python:")
+
+            stop = True
+        else:
+            number_model_runs += 1
+
+print ("##########################################################")
+print ("CALCULAR NUMERO SIMULACIONES PARA TIPOS DE ANTENAS GPRMAX")
+print ("1. Dipolo Herziano")
+print ("2. Antena MALA")
+print ("3. Antena GSSI")
+case = ast.literal_eval(input("Ingrese Opción: "))
+#case = 3
+if (case==1):
+    #antennas_distance = 0.05
+    antennas_distance = ast.literal_eval(input("Distancia entre antenas: \n"))
+    antenna_pol = ast.literal_eval(input("Direccion de polarizacion: \n"))
+
+#dominio = [0.5, 0.5,0.5]
+upx = ast.literal_eval(input("Ingrese dominio x: \n"))
+upy = ast.literal_eval(input("Ingrese dominio y: \n"))
+upz = ast.literal_eval(input("Ingrese dominio z: \n"))
+
+#resolution=0.002
+resolution = ast.literal_eval(input("Ingrese resolución : \n"))
+dx=resolution
+dy=resolution
+
+#x_spacing=0.05
+x_spacing= ast.literal_eval(input("Pasos en X : \n"))
+
+#y_spacing=0.05
+y_spacing=ast.literal_eval( input("Pasos en Y : \n"))
+
+#z_antenna=0.4
+z_antenna= ast.literal_eval(input("Altura Antena : \n"))
+
+# MINIMUM CELLS TO START
+plm= 14
+startx = (dx * plm)
+starty = (dy * plm)
+startz = (dy * plm)
+last_xposition=round(upx - startx,4)
+last_yposition=round(upy - starty,4)
+last_zposition = round(upz - startz, 4)
+
+if (case==1):
+    calculate_dipole()
+elif(case==2):
+    calculate_MALA()
+elif (case == 3):
+    calculate_GSSI()
+else:
+    sys.exit()
+\end{lstlisting}
+
+\newpage
+
+\begin{lstlisting} [language=Python,basicstyle=\tiny, label={code:run_muliple},caption= {Codigo Python para ejecutar múltiples escenarios  en gprMax}]
+import os
+import numpy as np
+import random
+import math
+import sys
+import json
+import glob
+import subprocess
+import argparse
+#############################################################
+# Created By Luis Eduardo Quibano Alarcon
+# Los Andes University - Bogota, Colombia
+# contact: le.quibano@uniandes.edu.co
+#
+# This script runs multiple models automaticaly by using a json configuration file
+#
+#############################################################
+userlibdir = os.path.dirname(os.path.abspath('__file__'))
+
+runGPU= False
+gpuNumber=0
+
+def str2bool(v):
+  return v.lower() in ("yes", "true", "t", "1")
+
+'''
+Configuration file for running all models inside one path:
+{
+"multiFolder":false,
+"directory": "/home/user/xxxxxxxx"
+}
+-------------------------------------
+Configuration file for running specific models inside one path:
+{
+"multiFolder":true,
+"directory": "/home/user/xxxxxxxx",
+"models" : ["folder_model_1","folder_model_2","folder_model_3"]
+}
+ 
+ 
+'''
+
+def runModels(runFile):
+
+
+    if os.path.isfile(runFile):
+        directoryToRun = open(runFile).read()
+        toRun = json.loads(directoryToRun.replace('\\', '/'))
+        if (str2bool(str(toRun["multiFolder"]))==False):
+            if os.path.isdir(str(toRun["directory"]).rstrip()):
+                ask =input("All models from  \n "+str(toRun["directory"]).rstrip()+ " will be simulated \n Are you sure? [y/n]: ")
+                if (ask=="n" or ask=="N"):
+                    sys.exit()
+                elif (ask=="y" or ask=="Y"):
+                    path = str(toRun["directory"]).rstrip()
+                else:
+                    sys.exit()
+
+                askGPU= input("Use GPU? [y/n]: ")
+                if (askGPU=="n" or askGPU=="N"):
+                    runGPU= False
+                elif (askGPU=="y" or askGPU=="Y"):
+                    runGPU=True
+                    gpuNumber = input("GPU Index: ")
+
+                directories = os.listdir(path)
+
+        elif (str2bool(str(toRun["multiFolder"])) == True):
+            directories=[]
+            askGPU = input("Use GPU? [y/n]: ")
+            if (askGPU == "n" or askGPU == "N"):
+                runGPU = False
+            elif (askGPU == "y" or askGPU == "Y"):
+                runGPU = True
+                gpuNumber = input("GPU Index: ")
+            print ("Multifolfer will be run")
+            if os.path.isdir(str(toRun["directory"]).rstrip()):
+                path = str(toRun["directory"]).rstrip()
+                for folders in  toRun["models"]:
+                    if os.path.isdir(str(toRun["directory"]).rstrip()+ "/"+folders):
+                        directories.extend([folders])
+
+        else:
+            print("Configuration file does not have required parameters.")
+            sys.exit()
+    else:
+        print("File do not exist: "+runFile)
+        sys.exit()
+
+
+    final_command=[]
+    exist_in=False
+    #RECORRO LAS CARPETAS DEL DIRECTORIO QUE ESTA CORRIENDO EL ARCHIVO
+    for name in directories:
+        if os.path.isdir(path+"/"+name):
+            print("Checking Folder",name)
+            #ABRO CADA CARPEYA
+            file = glob.glob(path+"/"+name+'/*.in')
+            #print(file)
+            if (len(file)==1):
+                #SI EN LA CARPETA EXISTE EL ARCHIVO .in CONTINUAR
+                    if os.path.isfile(path+"/"+name+"/configure_model.json"):
+                        json_data = open(path+"/"+name+"/configure_model.json").read()
+                        data = json.loads(json_data)
+                        #print(data)
+                        if ( ('n' in data)  and ('geometry-only'in data)):
+                            command=""
+                            if (isinstance(data['n'],int) and isinstance(data['geometry-only'],bool) ):
+                                command= "-n "+str(data['n'])
+                                if (runGPU==True):
+                                    command = command + " -gpu "+str(gpuNumber)
+                                if (str2bool(str(data['geometry-only']))==True):
+                                    command =command + " --geometry-only "
+                                final_command.extend(["python -m gprMax "+str(file[0])+" "+command])
+                                #print(final_command)
+                            else:
+                                print("parameters inside file are not correct")
+                                sys.exit()
+
+                        else:
+                            print ("There is not parameters 'n' and 'geometry-only' inside "+path+"/"+name+"/configure_model.json")
+                            sys.exit()
+                    else:
+                        print("Inside model folder  "+path+"/"+name+" do not exist configuration configure_model.json")
+                        sys.exit()
+
+
+            else:
+                print("Inside model folder  " + path + "/" + name + " do not exist '.in' file or there are more than one '.in' files ")
+                sys.exit()
+
+
+
+    print ("----------------------")
+    startRun=""
+    i=1
+    for command in final_command:
+        if(i == len(final_command)):
+            startRun= startRun + command+ " "
+            #print (command )
+        else:
+            startRun = startRun + command  + " && "
+            #print(command+ "&&")
+
+        i=i+1
+
+    start= input("Start Simulation? [y/n]: ")
+    if (start=="Y" or start=="y"):
+        print(startRun)
+        subprocess.call(startRun, shell=True)
+    elif (start=="N" or start=="n"):
+        sys.exit()
+    else:
+        sys.exit()
+
+
+if __name__ == "__main__":
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Run Multiple Simulations with Json file Congiguration.',
+        usage='cd gprMax; python run_files.py  <Json PATH>')
+    parser.add_argument('file', help='JSON file path')
+    #parser.add_argument('--remove-files', action='store_true', default=False,
+    #                   help='flag to remove individual output files after merge')
+
+    args = parser.parse_args()
+
+    #file = input("Configuration file path [Default=" + userlibdir + "/toRun.json /N]: ")
+
+
+    if os.path.isfile(args.file.strip()):
+        runFile = args.file.strip()
+        runModels(runFile)
+    else:
+        print(file.strip() + " No se encontro")
+        sys.exit()
+
+\end{lstlisting}
+
+\newpage
+
+
+\begin{lstlisting} [language=Python,basicstyle=\tiny,label={code:merge_multipleAscan},caption= {Codigo Python para combinar trazas A}]
+# Original Algorithm Created By:
+# Copyright (C) 2015-2018: The University of Edinburgh
+#                 Authors: Craig Warren and Antonis Giannopoulos
+#
+# Modified By : Luis Eduardo Quibano Alarcon
+# Los Andes University
+# Contact: le.quibano@uniandes.edu.co
+# Description:  This File reads a folder passed by args and checks if _Info_Cscan.json is inside folder
+#               After reads json file this script checks if number_model_runs from jsonfile is equal to modelrun's files
+#               it creates N merged files according to  aScansPerBScan and  number_model_runs
+import argparse
+import glob
+import os
+import json
+import sys
+import h5py
+import numpy as np
+import math
+import shutil
+def merge_files(basefilename):
+    """Merges traces (A-scans) from multiple output files into one new file,
+        then optionally removes the series of output files.
+
+    Args:
+        basefilename (string): Base name of output file series including path.
+        outputs (boolean): Flag to remove individual output files after merge.
+    """
+    if os.path.isdir((basefilename).rstrip()):
+        nameInfo= ((basefilename+"/_Info_CSCAN.json").strip()).replace('\\', '/')
+        if os.path.isfile(nameInfo):
+            print ("Si Existe el _Info_CSCAN.json")
+            json_data = open(nameInfo).read()
+            data = json.loads(json_data)
+            print (data)
+            fileInput = data['inputfile'].split("/")
+            fileNameInput= fileInput[-1]
+            #print (fileInput[-1])
+            #print(fileNameInput[0:-3])
+            files = glob.glob(basefilename+"/"+fileNameInput[0:-3] + '*.out')
+            outputfiles = [filename for filename in files if '_merged' not in filename]
+            #print(outputfiles)
+            modelruns = len(outputfiles)
+            print("total archivos" ,modelruns)
+            aScansPerBScan = data['scansPerBScan']
+            print("aScansPerBScan",aScansPerBScan)
+            if (data['number_model_runs']  != modelruns ):
+                print("El numero de modelos no coincide con la informacion de archivo .json")
+                sys.exit()
+
+            totalBscans= math.ceil(modelruns / aScansPerBScan)
+            print ("total Bscans",totalBscans)
+            # Combined output file
+            bscanResultFolder=basefilename+"/bscanResults"
+            if os.path.isdir(bscanResultFolder):
+                shutil.rmtree(bscanResultFolder, ignore_errors=True)
+                os.makedirs(bscanResultFolder)
+            else:
+                os.makedirs(bscanResultFolder)
+
+            for bscan in range(0,totalBscans):
+
+                outputfile = bscanResultFolder+"/"+fileNameInput[0:-3]+"_Bscan"+str(bscan+1)+ '_merged.out'
+                # Combined output file
+                fout = h5py.File(outputfile, 'w')
+
+                print("############")
+                print("Creating ", outputfile)
+
+                for model in range(0,aScansPerBScan):
+                    #print(model)
+                    modeltoopen =basefilename+"/"+fileNameInput[0:-3] + str(model + 1+aScansPerBScan*(bscan)) + '.out'
+                    print("Adding ",modeltoopen)
+                    fin = h5py.File(modeltoopen, 'r')
+                    #print (fin)
+                    nrx = fin.attrs['nrx']
+                    #print ("(model+aScansPerBScan*(bscan)) ",(model+aScansPerBScan*(bscan)))
+                    # Write properties for merged file on first iteration
+                    if model == 0:
+                        fout.attrs['Title'] = fin.attrs['Title']
+                        fout.attrs['gprMax'] = "Modified By Luis"
+                        fout.attrs['Iterations'] = fin.attrs['Iterations']
+                        fout.attrs['dt'] = fin.attrs['dt']
+                        fout.attrs['nrx'] = fin.attrs['nrx']
+                        for rx in range(1, nrx + 1):
+                            path = '/rxs/rx' + str(rx)
+                            grp = fout.create_group(path)
+                            availableoutputs = list(fin[path].keys())
+                            for output in availableoutputs:
+                                grp.create_dataset(output, (fout.attrs['Iterations'], aScansPerBScan),
+                                                   dtype=fin[path + '/' + output].dtype)
+
+                    # For all receivers
+                    for rx in range(1, nrx + 1):
+                        path = '/rxs/rx' + str(rx) + '/'
+                        availableoutputs = list(fin[path].keys())
+                        #print(availableoutputs)
+                        # For all receiver outputs
+                        for output in availableoutputs:
+                            #print(fout[path + '/' + output][:, model])
+                            fout[path + '/' + output][:, model] = fin[path + '/' + output][:]
+                    fin.close()
+
+
+
+
+
+
+                fout.close()
+    else:
+        print ("La ruta seleccionada no es un directorio")
+
+if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Merges traces (A-scans) from multiple output files into one new file, then optionally removes the series of output files.',
+        usage='cd gprMax; python -m tools.outputfiles_merge basefilename')
+    parser.add_argument('basefilename', help='base name of output file series including path')
+    #parser.add_argument('--remove-files', action='store_true', default=False,
+    #                   help='flag to remove individual output files after merge')
+    args = parser.parse_args()
+
+   # args.basefilename = os.getcwd()+"/merge_Cscan"
+    #args.basefilename = "C:/Users/Luis/Desktop/pruebas/cscan_x_mala_2_barras/"
+    print (args.basefilename)
+    merge_files(args.basefilename)
+
+
+
+
+\end{lstlisting}

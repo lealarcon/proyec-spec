@@ -1,0 +1,13 @@
+\section{Conclusiones}
+
+De acuerdo al cronograma presentado en la propuesta de tesis, se han realizado diferentes simulaciones de escenarios GPR mediante el programa gprMax, con lo que se ha podido obtener una base de datos de resultados para poder aplicar algoritmos de migración. Los primeros resultados obtenidos tuvieron que ser sometidos a una revisión minuciosa porque los datos que entregaba el simulador presentaban algunas inconsistencias en algunos datos. 
+
+Se encontró que el origen del error provenía de un módulo que fue diseñado para optimizar el proceso de simulación (Generar trazas C), el cual fue corregido y con ello se procedió a simular nuevamente los escenarios.
+
+El resultado de cada escenario generó un promedio de 2.500 archivos (Trazas A), los cuales se tuvo que procesar para combinarlos correctamente y generar las diferentes trazas B. Para ello se creó un script en Python que combina todos estos archivos dependiendo de los parámetros de cada escenario.
+
+Una vez validados los diferentes códigos realizados se inició con la búsqueda de los algoritmos de migración, el desarrollo de esta actividad se encuentra atrasada en unas 3 semanas porque los resultados de las simulaciones deben pasar por una etapa de pre-procesamiento. Para implementar los algoritmos de migración es necesario que las señales resultantes estén “limpias”, es decir, que contengan únicamente la respuesta de los objetos enterrados. Para limpiar las diferentes trazas se debió eliminar el ruido generado mediante la combinación de algoritmos que sean capaces de dar como resultado las hipérbolas formadas por cada uno de los objetos (target) que reflejan la señal del radar.
+
+Varios algoritmos de pre-procesamiento fueron implementados a partir de los resultados del simulador y con ello se ha utilizado el algoritmo de migración F-K obteniendo resultados parciales.
+
+Para obtener los resultados de las simulaciones en tiempos cortos, se ha venido utilizando procesamiento de alto desempeño mediante unidades de procesamiento gráfico (GPU) en plataformas Cloud, es necesario coordinar con el profesor Roberto acerca del uso de la plataforma en la nube porque el crédito que se tiene en google Cloud para trabajar con la GPU se está agotando y aún faltan más escenarios por simular.

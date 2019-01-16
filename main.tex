@@ -1,0 +1,151 @@
+\documentclass{article}
+
+\usepackage[
+  top=2cm,
+  bottom=2cm,
+  left=2cm,
+  right=2cm,
+  headheight=17pt, % as per the warning by fancyhdr
+  includehead,includefoot,
+  heightrounded, % to avoid spurious underfull messages
+]{geometry} 
+\usepackage{caption}
+\usepackage[export]{adjustbox}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\usepackage{listings} %Para colcoar codigos
+\usepackage[utf8]{inputenc}
+\usepackage[spanish, mexico]{babel}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{color}
+\usepackage{subfigure}
+\usepackage{array}
+\usepackage{longtable}
+\DeclareGraphicsExtensions{.pdf,.jpeg,.png,.eps,.jpg,.svg}
+\usepackage{enumerate}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{mathrsfs}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+
+\usepackage{xr}
+\usepackage{pdfpages}
+\usepackage[normalem]{ulem}
+\PassOptionsToPackage{subfigure}{tocloft}
+\usepackage{fixmetodonotes}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage{graphicx,import}
+\usepackage{cmap}
+\usepackage{hyperref}
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\lstlistlistingname}{Indice de códigos}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+
+\useunder{\uline}{\ul}{}
+
+\lstdefinestyle{customc}
+{
+  belowcaptionskip=1\baselineskip,
+  breaklines=true,
+  frame=L,
+  xleftmargin=\parindent,
+  language=Matlab,
+  showstringspaces=false,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\bfseries\color{green!40!black},
+  commentstyle=\itshape\color{purple!40!black},
+  identifierstyle=\color{black},
+  stringstyle=\color{orange},
+   commentstyle=\color{codegreen},
+}
+
+\newcommand{\subsubsubsection}[1]{\paragraph{#1}\mbox{}\\}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+
+\rhead{Proyecto MEDICI - UniAndes}
+\lhead{Informe de Avance Proyecto Especial y Tesis I}
+\setlength{\parskip}{1em}
+\lstset{style=customc}
+
+\begin{document}
+
+\lstset{
+	basicstyle=\ttfamily\fontfamily{iwona}\tiny\scriptsize,
+	frame=single,
+	showspaces=false, % show spaces adding particular underscores
+	showstringspaces=false, % underline spaces within strings
+	showtabs=false, % show tabs within strings adding particular underscores
+	tabsize=1, % sets default tabsize to 2 spaces
+	captionpos=true, % sets the caption-position to bottom
+	breaklines=true, % sets automatic line breaking
+	breakatwhitespace=true,
+	breakindent=1pt,
+	columns=fullflexible,
+	literate = {-}{-}1, % <-
+    keywordstyle=\color{blue},
+}
+
+%CODIFO PARA HAER SPLIT DE IMAGENES EN SUBFIGURE
+\makeatletter\def\CT{\def\@captype{figure}}\makeatother
+
+
+\begin{titlepage}
+
+\centering
+
+\huge \textbf{Informe de Avance Proyecto Especial}
+\vfill
+\includegraphics[width=0.1\textwidth]{fotos_portada/uniandes_icon.png}\\
+\large \textbf{Universidad de los Andes}
+\vfill
+\large \textbf{Documento asociado al proyecto:}
+\\
+\vspace{0.2cm}
+\large Microwave Detection of Improvised Explosive Devices in Colombia (MEDICI)
+\vfill
+\large \textbf{Autor:} 
+\\
+\vspace{0.2cm}
+\large Luis Eduardo Quibano Alarcón \\ le.quibano@uniandes.edu.co\\
+\vfill
+\large \today
+\end{titlepage}
+
+
+
+%\newpage
+\thispagestyle{empty}
+\pagestyle{fancy}
+\pagenumbering{roman}
+\phantomsection
+\tableofcontents
+\newpage
+\lstlistoflistings
+% CONTENTS
+% \cleardoublepage
+\pagenumbering{arabic}
+
+\newpage
+
+
+\include{chapter1/chapter1}
+\include{chapter2/chapter2}
+\include{chapter3/chapter3}
+\include{conclusiones/conclusiones}
+
+
+
+\bibliographystyle{ieeetr}
+\bibliography{bibliography/bibliography}
+\include{anexos}
+\end{document}
